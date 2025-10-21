@@ -1,0 +1,2 @@
+IMMICH_KEY = "a-long-api-key"
+IMMICH_URL = "https://example.com/api"

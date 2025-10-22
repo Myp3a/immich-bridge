@@ -1,16 +1,14 @@
 import asyncio
 from datetime import datetime
-import functools
 from hashlib import sha1
 import logging
 import os
-import subprocess
-from time import sleep, time
-from typing import Any, Callable, Literal, TypeVar, cast
+from time import sleep
+from typing import Any, Literal, TypeVar, cast
 
 import requests
 
-from .config import IMMICH_KEY, IMMICH_URL
+from config import IMMICH_KEY, IMMICH_URL
 
 logging.basicConfig(
     format="{asctime} | {levelname:<8} | {name} | {message}",
@@ -197,47 +195,16 @@ R = TypeVar("R")
 
 
 class MacPhotos:
-    @staticmethod
-    def kill_if_not_responding(checker: Callable, checker_arg: Any, timeout: int = 60):
-        def decor(func: Callable[..., R]):
-            @functools.wraps(func)
-            async def wrapper(*args, **kwargs) -> R:
-                check_seconds = 5
-                checker_check_time = time()
-                timeout_check_time = time()
-                photos_call = asyncio.to_thread(func, *args, **kwargs)
-                photos_res = asyncio.create_task(photos_call)
-                while not photos_res.done():
-                    if time() > checker_check_time + check_seconds:
-                        if (
-                            timeout > 0 and time() > timeout_check_time + timeout
-                        ) or checker(checker_arg):
-                            subprocess.run(["killall", "Photos"])
-                            _log.warning(
-                                "photos wasn't responding, killed and retrying"
-                            )
-                            timeout_check_time = time()
-                        checker_check_time = time()
-                    else:
-                        await asyncio.sleep(check_seconds)
-                return photos_res.result()
-
-            return wrapper
-
-        return decor
-
     def __init__(self) -> None:
         self.db = osxphotos.PhotosDB()
         conn, self.cur = self.db.get_db_connection()
         self.processed_album = osxphotos.photosalbum.PhotosAlbum(PROCESSED_ALBUM_NAME)
 
-    @kill_if_not_responding(lambda x: False, None)
     def app_ids(self) -> list[str]:
         self.cur.execute(SQL_GET_SOURCE_APPS)
         ids = [r[0] for r in self.cur.fetchall()]
         return ids
 
-    @kill_if_not_responding(lambda x: False, None)
     def app_image_ids(self, app_id: str | None) -> list[str]:
         if not app_id:
             self.cur.execute(SQL_GET_IMAGES_NO_APP)
@@ -246,14 +213,12 @@ class MacPhotos:
         ids = [r[0] for r in self.cur.fetchall()]
         return ids
 
-    @kill_if_not_responding(lambda x: False, None)
     def image_info(self, uuid: str) -> osxphotos.PhotoInfo:
         p = self.db.get_photo(uuid)
         if not p:
             raise RuntimeError(f"macOS Photos fail: no photo {uuid}")
         return p
 
-    @kill_if_not_responding(lambda x: False, None)
     def live_path(self, photo: osxphotos.PhotoInfo) -> str | None:
         if not photo.live_photo:
             return None
@@ -264,7 +229,6 @@ class MacPhotos:
             )
         return video
 
-    @kill_if_not_responding(lambda x: False, None)
     def capture_date(self, photo: osxphotos.PhotoInfo) -> datetime:
         # save date for memes
         if photo.exif_info is None:
@@ -273,20 +237,16 @@ class MacPhotos:
             return photo.date
         return photo.exif_info.date
 
-    @kill_if_not_responding(lambda x: False, None)
     def processed(self, photo: osxphotos.PhotoInfo) -> bool:
         albums = photo.albums
         return PROCESSED_ALBUM_NAME in albums
 
-    @kill_if_not_responding(lambda x: False, None)
     def burst_should_skip(self, photo: osxphotos.PhotoInfo) -> bool:
         return photo.burst and not photo.burst_key
 
-    @kill_if_not_responding(lambda x: False, None)
     def add_to_processed(self, photo: osxphotos.PhotoInfo) -> None:
         self.processed_album.add(photo)
 
-    @kill_if_not_responding(lambda x: False, None)
     def filenames(self, photo: osxphotos.PhotoInfo) -> list[str]:
         names = [photo.filename]
         if photo.live_photo:
@@ -307,16 +267,12 @@ class MacPhotos:
         return export
 
     async def fetch_photo_full_data(self, photo_uuid: str) -> dict[str, Any]:
-        photo = await self.image_info(photo_uuid)
-        save_date = await self.capture_date(photo)
-        expected_filenames = await self.filenames(photo)
+        photo = self.image_info(photo_uuid)
+        save_date = self.capture_date(photo)
         retries = 3
         export = []
         while retries > 0:
-            export = await MacPhotos.kill_if_not_responding(
-                lambda names: not [n for n in names if n in os.listdir("tmp")],
-                expected_filenames,
-            )(self.export)(photo)
+            export = self.export(photo)
             if not export:
                 retries -= 1
                 _log.warning(f"not exported anything, retries left: {retries}")
@@ -371,7 +327,7 @@ apps_mask: list[str] = []
 
 async def main():
     mac = MacPhotos()
-    app_ids = await mac.app_ids()
+    app_ids = mac.app_ids()
     for app in app_ids:
         if app not in APP_TO_ALBUM_MAPPINGS:
             _log.warning(f"unknown app {app}")
@@ -389,13 +345,13 @@ async def main():
             continue
         if APP_TO_ALBUM_MAPPINGS[app] is None:
             _log.warning(f"app {app} set as None, uploading but not adding to albums")
-        img_ids = await mac.app_image_ids(app)
+        img_ids = mac.app_image_ids(app)
         for img in img_ids:
-            img_obj = await mac.image_info(img)
-            if await mac.processed(img_obj) and not ignore_processed:
+            img_obj = mac.image_info(img)
+            if mac.processed(img_obj) and not ignore_processed:
                 continue
             _log.info(f"processing pic {img}")
-            if await mac.burst_should_skip(img_obj):
+            if mac.burst_should_skip(img_obj):
                 _log.info("part of burst, but not key, skipping")
                 continue
             img_data = await mac.fetch_photo_full_data(img)
@@ -451,7 +407,7 @@ async def main():
                 raise RuntimeError("never")
             if APP_TO_ALBUM_MAPPINGS[app] is not None:
                 immich.add_to_album(albums[APP_TO_ALBUM_MAPPINGS[app]], new_id)
-            await mac.add_to_processed(img_obj)
+            mac.add_to_processed(img_obj)
 
 
 if __name__ == "__main__":

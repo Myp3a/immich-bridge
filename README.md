@@ -14,5 +14,5 @@ A small script to copy images from iCloud to Immich, preserving metadata and sou
 
 # Caveats
 - Burst photos imported as single selected photo
-- Photos app can hang sometimes - not yet found the cause
+- Photos app can hang sometimes. If it happens - `killall Photos`
 - Can't delete from iCloud - must do that manually. For convience, processed photos are put to the iCloud album `immich_bridge`

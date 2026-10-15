@@ -1,20 +1,33 @@
 [project]
 name = "immich-bridge"
-version = "0.1.0"
+version = "0.2.0"
 description = "iCloud to Immich bridge"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "osxphotos>=0.72.1",
-    "requests>=2.32.5",
+    "httpx>=0.28.1",
+    "srp>=1.0.22",
 ]
 
 [dependency-groups]
 dev = [
-    "mypy>=1.17.1",
-    "pre-commit>=4.3.0",
-    "ruff>=0.12.10",
+    "mypy>=2.4.0",
+    "pre-commit>=4.6.2",
+    "ruff>=0.17.0",
 ]
 
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff]
+line-length = 120
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+
 [project.scripts]
-sync = "main:sync"
+sync = "immich_bridge.main:sync"

@@ -2,3 +2,6 @@
 /tmp
 /config.py
 .DS_Store
+__pycache__
+icloud.session
+/assets

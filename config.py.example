@@ -1,2 +1,4 @@
 IMMICH_KEY = "a-long-api-key"
 IMMICH_URL = "https://example.com/api"
+ICLOUD_LOGIN = "email@icloud.com"
+ICLOUD_PASS = "a-good-pass"
